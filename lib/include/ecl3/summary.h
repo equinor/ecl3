@@ -8,6 +8,66 @@ extern "C" {
 #endif //__cplusplus
 
 /*
+ * The summary files are a set of snapshot of simulated values such as rates,
+ * volume totals, and timestamps, and are organised in the following way:
+ *
+ * - A specification file (.SMSPEC) that describes the data layout
+ * - A series of simulation steps in either a unified file (.UNSMRY) or
+ *   separated by step (.Snnnn) where nnnn are consecutive numbers between 0000
+ *   and 9999
+ *
+ * Briefly, the unified summary .UNSMRY is just a concatenated set of .Snnnn
+ * files.
+ *
+ * In the summary file, data is recorded as report steps. In the non-unified
+ * case, every .Snnnn file is a single report step. Any report step can have
+ * one more timesteps, called ministeps. In documentation, these
+ * report-ministep pairs will be denoted as report.mini, i.e. (1.2) describes
+ * ministep 2 at report step 1. Report steps starts at 1, ministeps start at 0
+ *
+ * The specification is list of keywords with metadata describing how to
+ * interpret the data in the summary files. It essentially describes a matrix -
+ * consider a simulation with 2 wells, with summary for Well water cut (WWCT)
+ * and Well oil production rate (WOPR):
+ *
+ *  Step | WWCT:W1 | WWCT:W2 | WOPR:W1 | WOPR:W2
+ * ------+---------+---------+---------+--------
+ *  1.0  | 0.2     | 0.4     | 1000.4  | 7231.8
+ *  1.1  | 0.2     | 0.4     | 1020.1  | 4231.8
+ *  2.0  | 0.3     | 0.3     | 1220.1  | 4231.7
+ *  2.1  | 0.3     | 0.3     | 1220.1  | 2967.1
+ *
+ * The DIMENS keyword in the specification file specifies the paramter NLIST,
+ * which are the number of columns in this matrix. For this example, NLIST = 4,
+ * as step is derived from reportstep-ministep. The column headers (WWCT:W1) in
+ * this example are constructed from the KEYWORDS and WGNAMES keywords in the
+ * specification file, where WGNAME[n] corresponds to KEYWORD[n].
+ *
+ * In fact, most parameter in the specification file are index based. Consider
+ * the three keywords KEYWORDS, WGNAMES, and UNITS in a specification file:
+ *
+ * KEYWORDS: [WWPR, WWPR, WOPR]
+ * WGNAMES:  [W1, W2, W1]
+ * UNITS:    [SM3/DAY, SM3/DAY, SM3/DAY]
+ *
+ * Formatted as a matrix:
+ *
+ * WWPR     | WWPR      | WOPR
+ * W1       | W2        | W1
+ * SM3/DAY  | SM3/DAY   | SM3/DAY
+ *
+ * ministep 1.0: [5.2, 1.3, 4.2]
+ *
+ * Means that the Well water production rate (WWPR) for the well W1 is 5.2
+ * SM3/DAY at report step 1.0, i.e. the columns of the stacked keywords all
+ * describe the same sample.
+ *
+ * Every report step starts with a SEQHDR keyword, followed by pairs of
+ * MINISTEP-PARAMS keywords. The PARAMS should be NLIST long.
+ */
+
+
+/*
  * Obtain a list of the known keywords in the summary specification (.SMSPEC)
  * file.
  *
