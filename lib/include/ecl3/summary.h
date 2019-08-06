@@ -95,6 +95,91 @@ const char* ecl3_unit_system_name(int);
 ECL3_API
 const char* ecl3_simulatorid_name(int);
 
+/*
+ *
+ * The params_* functions are named as such because they deal with the
+ * identifiers for vectors provided with the PARAMS keyword in the summary
+ * files.
+ *
+ * Most keywords require additional data in order to uniquely identify what the
+ * corresponding vector means. Well-related keywords (WOPR, WWCT etc) all
+ * depend on a corresponding WGNAMES entry, whereas FIELD related keywords are
+ * completely specified.
+ *
+ * This function implements the ruleset, and can be used to determine if a
+ * vector depend on a data type to be fully specified.
+ *
+ * To make matters worse, summary specifications often contain columns whose
+ * values are all garbage.  These are identified by a rubbish entry in any of
+ * the additional specifiers. That means the otherwise valid keyword "WWCT    "
+ * maybe contain all garbage, if the corresponding WGNAMES is ":+:+:+:+" or
+ * blank.
+ *
+ * This functions returns non-zero a the keyword requires the additional data
+ * type.
+ *
+ * When a vector is partially identified by the given id, the number of
+ * identifiers required to uniquely identify the vector is returned. For
+ * example, a WOPR entry is identified by WOPR + well-name, and
+ * ecl3_params_identifies("WOPR    ", "WGNAMES ") return 1. Completions are
+ * identified by well-name and NUMS, so both ("WGNAME ", "COFR    ") and
+ * ("NUMS ", "COFR    ") return 2. This is to support iterating over possible
+ * identifiers and terminate when the vector is fully specified.
+ *
+ * Notes
+ * -----
+ * This function currently implements what is expected from eclipse. Intersect
+ * and petrel sometimes use the NAMES for varchar well names, rather than
+ * WGNAMES. This function is (currently) not aware, and will say that only
+ * WGNAMES will add to specification.
+ *
+ * Examples
+ * --------
+ * NLIST = 5
+ *
+ * KEYWORD | WGNAME
+ * --------+---------
+ * WWCT    | WELL1
+ * WWCT    | WELL2
+ * WWCT    | :+:+:+:+
+ * WOPR    | WELL1
+ * WOPR    | WELL1
+ *
+ * All PARAMS vector will have 5 values, but only 4 sensical.
+ *
+ * ecl3_params_identifies("WGNAMES ", "WWCT    ") -> true
+ * ecl3_params_identifies("WGNAMES ", "GOPR    ") -> true
+ * ecl3_params_identifies("NUMS    ", "GOPR    ") -> false
+ * ecl3_params_identifies("WGNAMES ", "YEARS   ") -> false
+ *
+ * This function is intended as a predicate to check whether or not a sample
+ * should be included in reports, computation or other data structures, or if
+ * the vector is nonsensical.
+ *
+ * The function ecl3_params_partial_identifiers return a list of identifiers
+ * that might make ecl3_params_iodentified_by return non-zero. For maximum
+ * future compatibility for arbitrary input, consider this example:
+ *
+ * const char* keyword = "WOPR    ";
+ * const char** id = ecl3_params_partial_identifiers();
+ * while (*id) {
+ *     if (ecl3_params_identifies(*id, keyword))
+ *         printf("%s depends on %s\n", *id, keyword);
+ *     ++id;
+ * }
+ */
+ECL3_API
+int ecl3_params_identifies(const char* id, const char* keyword);
+
+/*
+ * Obtain a list of the keywords that contribute to specialisation vectors, and
+ * would make ecl3_params_identifies return non-zero.
+ *
+ * The list is terminated by a NULL.
+ */
+ECL3_API
+const char** ecl3_params_partial_identifiers(void);
+
 enum ecl3_unit_systems {
     ECL3_METRIC = 1,
     ECL3_FIELD  = 2,
