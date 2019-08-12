@@ -116,7 +116,7 @@ jobs:
     steps:
       - checkout
       - install_build_deps:
-          extra: clang libfindbin-libs-perl
+          extra: clang clang-tools
       - cmake_build:
           scan: scan-build --status-bugs
 
