@@ -66,6 +66,7 @@ endif ()
 add_executable(ecl3-tests
     tests/tests.cpp
     tests/keyword.cpp
+    tests/summary.cpp
 )
 target_link_libraries(ecl3-tests ecl3 endianness::endianness ecl3::catch2)
 add_test(NAME ecl3-tests COMMAND ecl3-tests)

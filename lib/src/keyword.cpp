@@ -86,7 +86,7 @@ int ecl3_get_native(void* dst, const void* src, int fmt, std::size_t elems) {
     const int err = ecl3_type_size(fmt, &size);
     if (err) return err;
 
-    std::memcpy(dst, src, elems * size);
+    std::memmove(dst, src, elems * size);
     return ECL3_OK;
 }
 
