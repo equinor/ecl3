@@ -115,7 +115,7 @@ const char* ecl3_simulatorid_name(int);
  * maybe contain all garbage, if the corresponding WGNAMES is ":+:+:+:+" or
  * blank.
  *
- * This functions returns non-zero a the keyword requires the additional data
+ * This functions returns non-zero if the keyword requires the additional data
  * type.
  *
  * When a vector is partially identified by the given id, the number of
