@@ -5,6 +5,8 @@ import datetime
 import logging
 import itertools
 
+import numpy as np
+
 def timestamp(xs):
     return datetime.datetime(
         year    = xs[0],
@@ -94,6 +96,25 @@ class Summary(object):
 
         for key, value in items:
             self.update(key, value)
+
+        self.dtype_separator = '.'
+
+    @property
+    def dtype(self):
+        kw = self.keywords
+        wg = self.wgnames
+        nu = self.nums
+        lg = self.lgrs or []
+        nx = self.numlx or []
+        ny = self.numly or []
+        nz = self.numlz or []
+        sep = self.dtype_separator
+
+        names, pos = core.columns(kw, wg, nu, lg, nx, ny, nz, sep)
+        self.pos = pos
+        columns = [(name, 'f4') for name in names]
+        index = [('REPORTSTEP', 'i4'), ('MINISTEP', 'i4')]
+        return np.dtype(index + columns)
 
     def update(self, key, values):
         """

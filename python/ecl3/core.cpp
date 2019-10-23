@@ -1,4 +1,5 @@
 #include <array>
+#include <ciso646>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -197,6 +198,106 @@ py::list spec_keywords() {
     return xs;
 }
 
+bool is_void(const std::string& str) noexcept (true) {
+    return str == ":+:+:+:+" or str == "        ";
+}
+
+bool is_void(std::int32_t i) noexcept (true) {
+    return i < 0;
+}
+
+py::tuple columns(
+    py::list keywords,
+    py::list wgnames,
+    py::list nums,
+    py::list lgrs,
+    py::list numlx,
+    py::list numly,
+    py::list numlz,
+    const std::string& dtype_separator)
+{
+    /*
+     * Figure out the fully qualified column names for a summary file.
+     *
+     * See the docs for ecl3_params_identifies for more details. In short, a
+     * lot of data types are well or cell specific, and the keyword alone is
+     * not enough to read anything meaningful out of the corresponding vector.
+     * Determine these names by scanning through keywords, wgnames, nums etc.
+     *
+     * Sometimes, invalid or known void entries are used to signal that a
+     * column is filled with garbage, most commonly :+:+:+:+, and these columns
+     * are discarded.
+     */
+    assert(!keywords.empty());
+    assert(!wgnames.empty());
+    assert(!nums.empty());
+
+    assert(keywords.size() == wgnames.size());
+    assert(keywords.size() == nums.size());
+
+    assert(lgrs.empty()  or keywords.size() == lgrs.size());
+    assert(numlx.empty() or keywords.size() == numlx.size());
+    assert(numly.empty() or keywords.size() == numly.size());
+    assert(numlz.empty() or keywords.size() == numlz.size());
+
+    static constexpr const auto WGNAMES = "WGNAMES ";
+    static constexpr const auto NUMS    = "NUMS    ";
+    static constexpr const auto LGRS    = "LGRS    ";
+    static constexpr const auto NUMLX   = "NUMLX   ";
+    static constexpr const auto NUMLY   = "NUMLY   ";
+    static constexpr const auto NUMLZ   = "NUMLZ   ";
+
+    auto names = std::vector< std::string >();
+    auto pos = std::vector< int >();
+
+    for (std::size_t i = 0; i < keywords.size(); ++i) {
+        const auto kw = keywords[i].cast< std::string >();
+
+        auto id = std::stringstream();
+        id << kw;
+        if (ecl3_params_identifies(WGNAMES, kw.c_str())) {
+            const auto wgname = wgnames[i].cast< std::string >();
+            if (is_void(wgname)) continue;
+            id << dtype_separator << wgname;
+        }
+
+        if (ecl3_params_identifies(NUMS, kw.c_str())) {
+            const auto num = nums[i].cast< std::int32_t >();
+            if (is_void(num)) continue;
+            id << dtype_separator << num;
+        }
+
+        if (not lgrs.empty() and ecl3_params_identifies(LGRS, kw.c_str())) {
+            const auto lgr = lgrs[i].cast< std::int32_t >();
+            if (is_void(lgr)) continue;
+            id << dtype_separator << lgr;
+        }
+
+        if (not numlx.empty() and ecl3_params_identifies(NUMLX, kw.c_str())) {
+            const auto nx = numlx[i].cast< std::int32_t >();
+            if (is_void(nx)) continue;
+            id << dtype_separator << nx;
+        }
+
+        if (not numly.empty() and ecl3_params_identifies(NUMLY, kw.c_str())) {
+            const auto ny = numly[i].cast< std::int32_t >();
+            if (is_void(ny)) continue;
+            id << dtype_separator << ny;
+        }
+
+        if (not numlz.empty() and ecl3_params_identifies(NUMLZ, kw.c_str())) {
+            const auto nz = numlz[i].cast< std::int32_t >();
+            if (is_void(nz)) continue;
+            id << dtype_separator << nz;
+        }
+
+        names.push_back(id.str());
+        pos.push_back(int(i));
+    }
+
+    return py::make_tuple(names, pos);
+}
+
 }
 
 PYBIND11_MODULE(core, m) {
@@ -228,4 +329,5 @@ PYBIND11_MODULE(core, m) {
     m.def("spec_keywords", spec_keywords);
     m.def("unitsystem",  ecl3_unit_system_name);
     m.def("simulatorid", ecl3_simulatorid_name);
+    m.def("columns", columns);
 }
