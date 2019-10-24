@@ -111,10 +111,29 @@ class Summary(object):
         sep = self.dtype_separator
 
         names, pos = core.columns(kw, wg, nu, lg, nx, ny, nz, sep)
+
         self.pos = pos
         columns = [(name, 'f4') for name in names]
         index = [('REPORTSTEP', 'i4'), ('MINISTEP', 'i4')]
         return np.dtype(index + columns)
+
+    def readall(self, f):
+        """Read full summary report
+
+        Eagerly read the full summary report into a numpy array
+
+        Parameters
+        ----------
+        f : str_like
+            filename
+
+        Returns
+        -------
+        summary : np.ndarray
+        """
+        dtype = self.dtype
+        alloc = lambda rows: np.empty(rows, dtype = dtype)
+        return core.readall(str(f), alloc, dtype.itemsize, self.pos)
 
     def update(self, key, values):
         """

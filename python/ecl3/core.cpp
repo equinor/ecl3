@@ -11,8 +11,10 @@
 
 #include <ecl3/keyword.h>
 #include <ecl3/summary.h>
+#include <ecl3/io.hpp>
 
 namespace py = pybind11;
+using namespace py::literals;
 
 namespace {
 
@@ -268,7 +270,7 @@ py::tuple columns(
         }
 
         if (not lgrs.empty() and ecl3_params_identifies(LGRS, kw.c_str())) {
-            const auto lgr = lgrs[i].cast< std::int32_t >();
+            const auto lgr = lgrs[i].cast< std::string >();
             if (is_void(lgr)) continue;
             id << dtype_separator << lgr;
         }
@@ -291,11 +293,123 @@ py::tuple columns(
             id << dtype_separator << nz;
         }
 
-        names.push_back(id.str());
+        const auto name = id.str();
+        // skip if this is a duplicate somehow
+        if (std::find(names.begin(), names.end(), name) != names.end())
+            continue;
+
+        names.push_back(name);
         pos.push_back(int(i));
     }
 
     return py::make_tuple(names, pos);
+}
+
+template < unsigned long Len >
+void expect(const std::string& expected, const std::array< char, Len >& str) {
+    if (expected.size() != Len
+        or not std::equal(str.begin(), str.end(), expected.begin())) {
+
+        const auto stdstr = std::string(str.data(), str.size());
+        const auto msg = "expected " + expected + ", was " + stdstr;
+        throw std::runtime_error(msg);
+    }
+}
+
+bool end_report_step(const ecl3::raw_array& kw) noexcept (true) {
+    return std::equal(kw.keyword.begin(), kw.keyword.end(), "SEQHDR  ");
+}
+
+py::object readall(
+    const std::string& fname,
+    py::object alloc,
+    int rowsize,
+    const std::vector< int >& pos) {
+
+    int rows = 0;
+    std::int32_t report_step = 1;
+    ecl3::stream_reader< std::ifstream > stream(fname);
+    auto buffer = std::vector< unsigned char >(64 * rowsize);
+
+    const auto& seqhdr = stream.next();
+    if (seqhdr.empty()) {
+        // No records at all, warrants an error for now
+        const auto msg = "no initial SEQHDR found, file seems broken";
+        throw std::runtime_error(msg);
+    }
+
+    expect("SEQHDR  ", seqhdr.keyword);
+    expect("INTE", seqhdr.type);
+
+    while (true) {
+        if ((rows - 1) * rowsize >= buffer.size()) {
+            buffer.resize(buffer.size() * 2);
+        }
+
+        const auto& ministep = stream.next();
+        if (ministep.empty()) {
+            // if this is empty, we're at an acceptable place for an eof
+            // this won't happen after end_report_step is true, because it
+            // already checks empty()
+            break;
+        }
+
+        if (end_report_step(ministep)) {
+            // read the next record, which now should not be empty (it should
+            // be MINISTEP), then unget so the next iteration's MINISTEP gets
+            // this record
+            if (stream.next().empty()) {
+                const auto msg = "unexpected end-of-file, expected MINISTEP";
+                throw std::runtime_error(msg);
+            }
+
+            stream.unget();
+            continue;
+        }
+
+        expect("MINISTEP", ministep.keyword);
+        expect("INTE", ministep.type);
+
+        auto* dst = buffer.data() + rows * rowsize;
+        std::memcpy(dst += 0, &report_step, sizeof(report_step));
+        std::memcpy(dst += 4, ministep.body.data(), sizeof(std::int32_t));
+
+        // this invalidates all references to ministep
+        const auto& params = stream.next();
+        if (params.empty()) {
+            const auto msg = "unexpected end-of-file, expected PARAMS";
+            throw std::runtime_error(msg);
+        }
+        expect("PARAMS  ", params.keyword);
+        const auto* src = params.body.data();
+        // write_item
+        for (auto p : pos) {
+            static_assert(
+                sizeof(float) == 4,
+                "the pointer arithmetic relies on 4-byte float"
+            );
+            const auto src_off = p * sizeof(float);
+            std::memcpy(dst += 4, src + src_off, sizeof(float));
+        }
+
+        ++rows;
+    }
+
+    py::buffer arr = alloc(rows);
+    auto view = arr.request(true);
+    if (view.size * view.itemsize != rowsize * rows) {
+        std::stringstream msg;
+        msg << "internal alloc function size error, was "
+            << view.size * view.itemsize
+            << " (" << view.size << " rows)"
+            << ", expected "
+            << rowsize * rows
+            << " (" << rows << " rows)"
+        ;
+        throw std::invalid_argument(msg.str());
+    }
+    std::memcpy(view.ptr, buffer.data(), rows * rowsize);
+    return arr;
 }
 
 }
@@ -330,4 +444,5 @@ PYBIND11_MODULE(core, m) {
     m.def("unitsystem",  ecl3_unit_system_name);
     m.def("simulatorid", ecl3_simulatorid_name);
     m.def("columns", columns);
+    m.def("readall", readall);
 }
