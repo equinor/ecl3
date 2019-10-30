@@ -39,10 +39,65 @@ commands:
           name: install python dependencies
           command: python -m pip install --user -r python/requirements-dev.txt
       - run:
-          name: build python
+          name: build python package
           command: |
             cd python
             python setup.py build_ext --inplace install --user test
+
+  wheels:
+    parameters:
+      skip:
+        type: string
+        default: "3.8"
+      upload:
+        type: boolean
+        default: false
+    steps:
+      - checkout
+      - run:
+          name: Build the core library
+          command: |
+            export PATH=/opt/python/cp35-cp35m/bin:$PATH
+            python -m pip install --progress-bar off cmake scikit-build
+            mkdir build && cd build
+            cmake \
+                -DBUILD_SHARED_LIBS=ON \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_PYTHON=OFF \
+                ..
+            make
+            make install
+      - run:
+          name: Build the Linux wheels
+          command: |
+            cd python
+            for PY in /opt/python/*/bin; do
+                if $PY/python --version | grep -qP << parameters.skip >>; then
+                    # skip 3.8 for now, as the cmake binary tries to build from source
+                    # because it's only available as manylinux2010
+                    # https://github.com/scikit-build/cmake-python-distributions/issues/78
+                    echo "Skipping $PY"
+                    continue
+                fi
+
+                $PY/python -m pip install --progress-bar off -r requirements-dev.txt cmake
+                $PY/python setup.py bdist_wheel --cmake-executable=$PY/cmake
+            done
+
+            for wheel in dist/*.whl; do
+                auditwheel repair $wheel;
+            done
+      - when:
+          condition: << parameters.upload >>
+          steps:
+            - run:
+                command: |
+                    export PATH=/opt/python/cp35-cp35m/bin:$PATH
+                    python -m pip install --user twine
+                    python -m twine upload \
+                        --username ${PYPI_USER} \
+                        --password ${PYPI_PASSWORD} \
+                        python/wheelhouse/*
 
   cmake_build:
     description: ecl3 build steps
@@ -162,6 +217,19 @@ jobs:
     steps:
       - python_build
 
+  test-wheel:
+    docker:
+      - image: quay.io/pypa/manylinux1_x86_64
+    steps:
+      - wheels
+
+  upload-wheel:
+    docker:
+      - image: quay.io/pypa/manylinux1_x86_64
+    steps:
+      - wheels:
+          upload: true
+
 workflows:
   version: 2
   build:
@@ -181,3 +249,10 @@ workflows:
       - python-35
       - python-36
       - python-37
+      - test-wheel
+      - upload-wheel:
+          filters:
+            tags:
+              only: /^v[0-9]+(\.[0-9]+)*(-.*)?/
+            branches:
+              ignore: /.*/
