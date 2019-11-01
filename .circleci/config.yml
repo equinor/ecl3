@@ -91,6 +91,7 @@ commands:
           condition: << parameters.upload >>
           steps:
             - run:
+                name: Upload linux wheels
                 command: |
                     export PATH=/opt/python/cp35-cp35m/bin:$PATH
                     python -m pip install --user twine
