@@ -3,6 +3,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 import pytest
 import datetime
+import numpy as np
 
 from .. import summary
 from .. import core
@@ -169,6 +170,42 @@ def test_intehead_simulator_miss_warns(caplog):
     invalid = 10
     _ = summary.smspec([('INTEHEAD', [1, invalid])])
     assert len(caplog.records) == 1
+
+def test_dtype_all_valid_keys():
+    s = summary.smspec(minimal_keywords)
+    columns = [
+        ('REPORTSTEP', 'i4'), ('MINISTEP', 'i4'),
+        ('WOPR.W1', 'f4'), ('WOPT.W2', 'f4'),
+    ]
+
+    assert s.dtype == np.dtype(columns)
+    assert s.pos == [0, 1]
+
+def test_dtype_custom_separator():
+    s = summary.smspec(minimal_keywords)
+    s.dtype_separator = '-'
+    columns = [
+        ('REPORTSTEP', 'i4'), ('MINISTEP', 'i4'),
+        ('WOPR-W1', 'f4'), ('WOPT-W2', 'f4'),
+    ]
+    assert s.dtype == np.dtype(columns)
+    assert s.pos == [0, 1]
+
+def test_dtype_void_wgname():
+    keywords = dict(minimal_keywords)
+    keywords['DIMENS'  ][0] += 1
+    keywords['KEYWORDS'].append('WOPR')
+    keywords['WGNAMES' ].append(':+:+:+:+')
+    keywords['UNITS'   ].append('SM3/DAY')
+    keywords['MEASRMNT'] += ['O:FLOWVO', 'LUME    ']
+    keywords['NUMS'    ].append(0)
+    s = summary.smspec(keywords)
+    columns = [
+        ('REPORTSTEP', 'i4'), ('MINISTEP', 'i4'),
+        ('WOPR.W1', 'f4'), ('WOPT.W2', 'f4'),
+    ]
+    assert s.dtype == np.dtype(columns)
+    assert s.pos == [0, 1]
 
 def test_load_smspec():
     s = summary.load(data / 'simple3.smspec')
