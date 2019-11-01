@@ -255,7 +255,7 @@ py::tuple columns(
     for (std::size_t i = 0; i < keywords.size(); ++i) {
         const auto kw = keywords[i].cast< std::string >();
 
-        auto id = std::stringstream();
+        std::stringstream id;
         id << kw;
         if (ecl3_params_identifies(WGNAMES, kw.c_str())) {
             const auto wgname = wgnames[i].cast< std::string >();
