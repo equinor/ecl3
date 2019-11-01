@@ -4,4 +4,8 @@ try:
 except pkg_resources.DistributionNotFound:
     pass
 
-__all__ = []
+from . import summary
+
+__all__ = [
+    'summary',
+]
