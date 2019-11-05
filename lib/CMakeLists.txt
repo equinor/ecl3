@@ -45,15 +45,20 @@ install(
 )
 install(DIRECTORY include/ DESTINATION include)
 install(
-    EXPORT ecl3-export
-    NAMESPACE ecl3::
-    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ecl3/cmake
-    FILE ecl3-config.cmake
+    EXPORT
+        ecl3-export
+    NAMESPACE
+        ecl3::
+    DESTINATION
+        ${CMAKE_INSTALL_DATAROOTDIR}/ecl3/cmake
+    FILE
+        ecl3-config.cmake
 )
 export(
     TARGETS
         ecl3
-        NAMESPACE ecl3::
+    NAMESPACE
+        ecl3::
     FILE
         ecl3-config.cmake
 )
