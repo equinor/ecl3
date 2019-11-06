@@ -7,161 +7,224 @@
 extern "C" {
 #endif //__cplusplus
 
-/*
- * As per the gnu fortran manual, the record byte marker is int32. We could
+/**
+ * @file keyword.h
+ * The keyword module
+ *
+ * This module contains functions for working with the low-level concept of
+ * *arrays* and *keywords*, and their peculiarities.
+ *
+ *     #include <ecl3/keyword.h>
+ *
+ * An array is a sequential structure of values, all of the same size, just
+ * like arrays in C. However, when a Fortran program writes unformatted data to
+ * file in a statement like this:
+ *
+ *     integer array(100)
+ *     write(unit) array
+ *
+ * It also writes a head and tail immediately preceeding and following the
+ * data. The head and tail are both 4-byte integers [1] that, in bytes, record
+ * the size of the array. This detail allows seeking past arbitrary arrays as
+ * units, from in both directions. What is actually found on disk after the
+ * Fortran code would be:
+ *
+ *     | 400 | data ...... | 400 |
+ *
+ * As per the gnu fortran manual [1], the record byte marker is int32. We could
  * support 8-byte markers with either compile-time configuration or a run-time
- * switch
- *
- * A Fortran program writes unformatted data to file in a statemente like:
- *
- *    integer array(100)
- *    write(unit) array
- *
- * it actually writes a head and tail in addition to the actual data. The
- * header and tail is a 4 [1] byte integer, which value is the number of bytes
- * in the immediately following record. I.e. what is actually found on disk
- * after the Fortran code above is:
- *
- *   | 400 | array ...... | 400 |
+ * switch, but as of now this is not implemented.
  *
  * [1] http://gcc.gnu.org/onlinedocs/gfortran/File-format-of-unformatted-sequential-files.html
+ *
+ * A *keyword* in ecl3 is the conceptual structure:
+ *
+ *     struct keyword {
+ *         str  name;
+ *         tag  type;
+ *         int  len;
+ *         byte data[];
+ *     };
+ *
+ * Or, a more visual example, a tagged column vector:
+ *
+ *     +------------+
+ *     | 'KEYWORDS' |
+ *     | 'CHAR'     |
+ *     | 5          |
+ *     +------------+
+ *     | 'TIME    ' |
+ *     | 'FOPR    ' |
+ *     | 'GOPR    ' |
+ *     | 'GOPR    ' |
+ *     | 'GOPR    ' |
+ *     | 'GOPR    ' |
+ *     +------------+
+ *
+ * The header and body of a keyword are written separately, which means they
+ * both come with the Fortran block length metadata.
+ *
+ * Additionally, larger arrays are written in batches as several smaller arrays
+ * in chunks of 1000 or 105 (for strings). These chunks are interspersed with
+ * head and tail, but has no headers inbetween them.
  */
 
-/*
- * Copy elems elements of type fmt from memory area src to memory area dst
+/**
+ * Copy elements of type fmt from src to dst
  *
  * This is essentially a memcpy that's endian- and type aware, and translates
- * to/from on-disk representation of arrays to CPU-native representations.
+ * from on-disk representation of arrays to CPU-native representations. fmt
+ * should be consistent with the type of dst, e.g. if fmt is ECL3_INTE, the
+ * data in source should be int32, ECL3_DOUB should be double etc.
  *
- * Examples
- * --------
+ * **Returns**
+ * \rst
+ * ECL3_OK
+ *    Success
+ * ECL3_INVALID_ARGS
+ *    fmt is unknown. Note that src and dst are not checked for NULL
+ * ECL3_UNSUPPORTED
+ *    fmt is a known and valid value, but is not yet supported
+ * \endrst
+ *
+ * **Examples**
+ *
  * Read an integer array from disk:
  *
- *  char head[4], tail[4];
- *  int32_t elems;
- *  int32_t* data;
- *  fread(head, sizeof(head), 1, fp);
- *  ecl3_get_native(&elems, head, ECL3_INTE, 1);
- *  elems /= sizeof(int32_t)
- *  data = malloc(head);
- *  fread(buffer, sizeof(int32_t), elems, fp);
- *  ecl3_get_native(data, buffer, ECL3_INTE, elems);
- *  fread(tail, sizeof(tail), 1, fp);
+ *     char head[4], tail[4];
+ *     int32_t elems;
+ *     int32_t* data;
+ *     fread(head, sizeof(head), 1, fp);
+ *     ecl3_get_native(&elems, head, ECL3_INTE, 1);
+ *     elems /= sizeof(int32_t)
+ *     data = malloc(head);
+ *     fread(buffer, sizeof(int32_t), elems, fp);
+ *     ecl3_get_native(data, buffer, ECL3_INTE, elems);
+ *     fread(tail, sizeof(tail), 1, fp);
  */
 ECL3_API
 int ecl3_get_native(void* dst, const void* src, int fmt, size_t elems);
 
+/**
+ * Copy elements of type fmt from src to dst
+ *
+ * This is the host-to-disk inverse of ecl3_get_native
+ *
+ * @see ecl3_get_native
+ */
 ECL3_API
 int ecl3_put_native(void* dst, const void* src, int fmt, size_t elems);
 
-/*
- * `Keywords` in ecl3 is the conceptual structure:
- *
- * struct {
- *     str  name;
- *     tag  type;
- *     int  len;
- *     byte data[];
- * };
- *
- * Or, a more visual example, a tagged column vector:
- *
- * +------------+
- * | 'KEYWORDS' |
- * | 'CHAR'     | HEADER
- * | 5          |
- * +------------+
- * | 'TIME    ' |
- * | 'FOPR    ' |
- * | 'GOPR    ' | BODY
- * | 'GOPR    ' |
- * | 'GOPR    ' |
- * +------------+
- *
- * The header and body are written separately, which means they both come with
- * the Fortran block length metadata. Furthermore, large array bodies are split
- * up into 105-element (for strings) or 1000 element chunks.
- *
- * This module provide the functions guide I/O and parse these structures once
- * read from disk
- */
 
-/*
- * Convert from in-file string representation to ecl3_typeids value.
+/**
+ * Convert from in-file string representation to ecl3_typeids value
  *
  * This function maps the input string, as found in the file, to the
  * corresponding enum value in ecl3_typeids. The enum value is a lot more
  * practical to work with in C programs.
  *
- * Returns ECL3_OK if str was any of the values in ecl3_typeids, and
- * ECL3_INVALID_ARGS otherwise.
  *
- * Examples
- * --------
- *  int type;
- *  ecl3_typeid("INTE", &type);
- *  if (type == ECL3_INTE) puts("type was INTE");
+ * **Returns**
+ *
+ * ECL3_OK if str was any of the values in ecl3_typeids, and ECL3_INVALID_ARGS
+ * otherwise.
+ *
+ * **Examples**
+ *
+ * Get the typeid for INTE:
+ *
+ *     int type;
+ *     ecl3_typeid("INTE", &type);
+ *     if (type == ECL3_INTE) puts("type was INTE");
  */
 ECL3_API
 int ecl3_typeid(const char* str, int* type);
 
-/*
+/**
  * Get the size, in bytes, of a keyword type
  *
  * Takes a keyword type, as returned by ecl3_typeid, and yields the size
  * in bytes. Returns ECL3_OK on success, and ECL3_INVALID_ARGS if the type
  * argument is not an ecl3_typeid.
  *
- * If given a valid, but unsupported type, this function returns
- * ECL3_UNSUPPORTED.
+ * This function is particularly useful for allocating buffer space for arrays,
+ * without any branching.
+ *
+ * **Returns**
+ *
+ * \rst
+ * ECL3_OK
+ *    Success
+ * ECL3_INVALID_ARGS
+ *    fmt is unknown. Note that src and dst are not checked for NULL
+ * ECL3_UNSUPPORTED
+ *    fmt is a known and valid value, but is not yet supported
+ * \endrst
+ *
+ * **Examples**
+ *
+ * Get the size of DOUB and alloc buffer:
+ *
+ *     int elems = 10;
+ *     int elemsize;
+ *     ecl3_type_size(ECL3_DOUB, &elemsize);
+ *     void* buffer = malloc(elemsize * elems);
  */
 ECL3_API
 int ecl3_type_size(int type, int* size);
 
-/*
+/**
+ * String type name
+ *
  * Get a static, null-terminated string representation of type. This is the
- * inverse function of ecl3_typeid.
+ * inverse function of ecl3_typeid, and in particular useful for printing.
  *
- * In short, it holds that:
+ * **Examples**
  *
- * int type;
- * ecl3_typeid("INTE", &type)
- * const char* name = ecl3_type_name(type);
- * assert(strncmp("INTE", name, 4) == 0)
+ * type_name - typeid round trip:
+ *
+ *     int type;
+ *     ecl3_typeid("INTE", &type)
+ *     const char* name = ecl3_type_name(type);
+ *     assert(strncmp("INTE", name, 4) == 0)
  */
 ECL3_API
 const char* ecl3_type_name(int type);
 
-/*
- * Get the size of an array header
+/**
+ * Size of an array header
  *
- * The array header is the record:
+ * The array header is the Fortran record:
  *
- * STRUCTURE /KEYWORD/:
- *      CHARACTER (LEN=8) name
- *      INTEGER           len
- *      CHARACTER (LEN=4) type
+ *     STRUCTURE /KEYWORD/:
+ *          CHARACTER (LEN=8) name
+ *          INTEGER           len
+ *          CHARACTER (LEN=4) type
  *
+ * **Notes**
+ *
+ * This function is intended for a complete knowledge base, in particular for
+ * allocating buffers and exposing it to scripting languages, but in most C and
+ * C++ code it should be fine to use constant 16.
  */
 ECL3_API
 int ecl3_array_header_size();
 
-/*
- * Arrays in the file format are written as two records, a header and a body.
+/**
+ * Parse keyword header
  *
- * The header contains metadata about the following array: its name/keyword,
- * its type, and its length (in elements, not bytes!). This function parses the
- * array header.
+ * The keyword header describes the array immediately following it: its name,
+ * its type, and its size (in elements, not bytes!). This function parses the
+ * keyword header.
  *
  * On disk, an array is typically laid out as such:
  *
- * |head| KEYWORD COUNT TYPE |tail| |head| VALUE1 VALUE2 .. VALUEN |tail|
- *      + ------------------ +           + ----------------------- +
- *      | array header       |           | array body              |
- *
+ *     |head| KEYWORD COUNT TYPE |tail| |head| VALUE1 VALUE2 .. VALUEN |tail|
+ *          + ------------------ +           + ----------------------- +
+ *          | array header       |           | array body              |
  *
  * where |head| and |tail| are record length markers. This function is unaware
- * of the record markers, and assumes they have been dealt with.
+ * of the record markers, src should point to the start of the keyword header.
  *
  * This function faithfully outputs what's actually on disk. To obtain a more
  * practical representation for the array type, use the output type from this
@@ -173,71 +236,72 @@ int ecl3_array_header(const void* src, char* keyword, char* type, int* count);
 #define ECL3_BLOCK_SIZE_NUMERIC 1000
 #define ECL3_BLOCK_SIZE_STRING  105
 
-/*
+/**
  * Get the specified block size for a given type
  *
- * See ecl3_array_body for rationale and description
+ * @see ecl3_array_body for rationale and description
  */
 ECL3_API
 int ecl3_block_size(int type, int* size);
 
-/*
+/**
  * Read chunks of array body items of type from src to dst
  *
- * Arrays are written in chunks, or blocked, i.e. large arrays are partitioned
- * into consecutive smaller arrays. Different data types are blocked
- * differently. To get the block for a type, call ecl3_block_size.
+ * Arrays are written to disk in chunks, i.e. large arrays are partitioned into
+ * consecutive smaller arrays. To make matters worse, different data types are
+ * blocked differently.
  *
- * Consider a keyword [WOPR, INTE, 2800]. When written it, it looks like this:
+ * @see ecl3_block_size to get the block size for a type.
  *
- * | HEADER | N0000 N0001 ... | N1000 N1001 ... | N2000 ... N2799 |
+ * Consider a keyword [WOPR, INTE, 2800]. When written, it looks like this:
  *
- * Every | marks a fortran write head/tail.
+ *     | HEADER | N0000 N0001 ... | N1000 N1001 ... | N2000 ... N2799 |
  *
- * This function helps parse the array chunks by reading them from src,
- * typically unmodified from disk.
+ * Every | marks a Fortran head/tail.
  *
- * Parameters
- * ----------
- *  dst:        output array
- *  src:        input buffer
- *  type:       array type, should be one of enum ecl3_typeids
- *  block_size: number of elements read before this function pauses
- *  elems:      remaining elements in the array.
- *  count:      number of elements read this invocation
+ * This function helps parse the bytes read from disk. It is designed to be
+ * called multiple times on large arrays, until the entire keyword has been
+ * read. It is expected that the caller updates dst/src/elems between
+ * invocations, see the examples.
  *
- * Returns
- * -------
- *  ECL3_OK on success
- *  ECL3_INVALID_ARGS if the type is unknown
- *  ECL3_UNSUPPORTED if the type is not yet supported
+ * @param dst output buffer
+ * @param src input buffer, as read from disk
+ * @param type from the keyword header, should one of enum ecl3_typeids
+ * @param elems remaining elements in the array
+ * @param chunk_size number of elements before the function pauses
+ * @param count number of elements read
  *
- * Notes
- * -----
- *  This function is designed to be called multiple times on large arrays,
- *  until the entire keyword has been read. It is expected that the caller
- *  updates dst/src/elems between invocations.
+ * **Returns**
+ * \rst
+ * ECL3_OK
+ *      success
+ * ECL3_INVALID_ARGS
+ *      if the type is unknown
+ * ECL3_UNSUPPORTED
+ *      if the type is not yet supported
+ * \endrst
  *
- *  The chunk_size value should typically be obtained by calling
- *  ecl3_chunk_size. The manual specifies the size of these blocks dependent on
- *  data types (the value output by ecl3_block_size), but this function impose
- *  no such restriction. This is to enable recovery on broken-but-similar files
- *  with weird blocking - almost all uses should be fine with the default
- *  values.
+ * **Notes**
  *
- * Examples
- * --------
- *  The typical use should look like this:
+ * The chunk_size value should typically be obtained by calling
+ * ecl3_block_size. The manual specifies the size of these blocks dependent on
+ * data types (the value output by ecl3_block_size), but this function impose
+ * no such restriction. This is to enable recovery on broken-but-similar files
+ * with weird blocking.
  *
- *  type, remaining = parse_keyword_header();
- *  ecl3_block_size(type, &chunk_size);
- *  while (remaining > 0) {
- *      nbytes = read_f77_block_head()
- *      read(src, nbytes)
- *      ecl3_array_body(dst, src, type, remaining, block_size, &count);
- *      remaining -= count;
- *      dst += count;
- *  }
+ * **Examples**
+ *
+ * Read an arbitrary, blocked array from disk, and parse it:
+ *
+ *     type, remaining = parse_keyword_header();
+ *     ecl3_block_size(type, &chunk_size);
+ *     while (remaining > 0) {
+ *         nbytes = read_f77_block_head()
+ *         read(src, nbytes)
+ *         ecl3_array_body(dst, src, type, remaining, block_size, &count);
+ *         remaining -= count;
+ *         dst += count;
+ *     }
  */
 ECL3_API
 int ecl3_array_body(void* dst,

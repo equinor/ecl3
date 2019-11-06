@@ -1,0 +1,24 @@
+INPUT = "@DOXYGEN_INPUT_DIR@"
+OUTPUT_DIRECTORY = "@DOXYGEN_OUTPUT_DIR@"
+PROJECT_NAME = "ecl3"
+
+# generate xml for sphinx+breathe
+GENERATE_XML = YES
+GENERATE_HTML = NO
+
+OPTIMIZE_OUTPUT_FOR_C = YES
+
+ENABLE_PREPROCESSING = YES
+MACRO_EXPANSION = YES
+EXPAND_ONLY_PREDEF = YES
+# the ECL3_API macro is really only useful for the compiler, and spectacularly
+# breaks sphinx' ability to parse the function signatures, as it carries as a
+# part of the return type.
+PREDEFINED = "ECL3_API="
+
+# make the first line of a /** */ block the brief/synopsis
+JAVADOC_AUTOBRIEF = YES
+
+# easy inlining of rst
+ALIASES  = "rst=\verbatim embed:rst:leading-asterisk"
+ALIASES += "endrst=\endverbatim"

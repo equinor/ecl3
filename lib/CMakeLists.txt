@@ -10,7 +10,6 @@ add_library(ecl3
     src/summary.cpp
 )
 add_library(ecl3::ecl3 ALIAS ecl3)
-set_property(TARGET ecl3 PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(ecl3
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -46,15 +45,20 @@ install(
 )
 install(DIRECTORY include/ DESTINATION include)
 install(
-    EXPORT ecl3-export
-    NAMESPACE ecl3::
-    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ecl3/cmake
-    FILE ecl3-config.cmake
+    EXPORT
+        ecl3-export
+    NAMESPACE
+        ecl3::
+    DESTINATION
+        ${CMAKE_INSTALL_DATAROOTDIR}/ecl3/cmake
+    FILE
+        ecl3-config.cmake
 )
 export(
     TARGETS
         ecl3
-        NAMESPACE ecl3::
+    NAMESPACE
+        ecl3::
     FILE
         ecl3-config.cmake
 )
