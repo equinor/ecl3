@@ -5,3 +5,4 @@ ecl3 documentation
     :maxdepth: 3
 
     c/keyword
+    c/summary
