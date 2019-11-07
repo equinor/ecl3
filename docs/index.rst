@@ -6,3 +6,4 @@ ecl3 documentation
 
     c/keyword
     c/summary
+    python/summary
