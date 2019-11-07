@@ -27,7 +27,7 @@ class runtime_monitor(object):
         self.basic = None
         self.double = None
 
-class Summary(object):
+class summary(object):
 
     def __init__(self, keywords = None):
         """
@@ -394,10 +394,10 @@ class Summary(object):
 
     @staticmethod
     def load(keywords):
-        s = Summary(keywords)
+        s = summary(keywords)
         s.check_integrity()
         return s
 
 def load(path):
     stream = core.stream(path)
-    return Summary.load((k.keyword, k.values) for k in stream.keywords())
+    return summary.load((k.keyword, k.values) for k in stream.keywords())
