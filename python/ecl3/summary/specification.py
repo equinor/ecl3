@@ -28,11 +28,17 @@ class runtime_monitor(object):
         self.double = None
 
 class summary(object):
+    """Summary
+
+    This is a fairly low-level object, in the sense that it has no concept of
+    simulations, cases, or context. Instead, it implements a faithful python
+    model of what goes on inside .SMSPEC, .UNSMRY, and .SNNNN files.
+    """
 
     def __init__(self, keywords = None):
         """
         __init__ sets all its members to None by default, to be able to
-        distinguish un-set values from set-but-empty
+        distinguish un-set values from set-but-empty.
 
         If keywords is not None, it sets as many of the internal variables as
         it can.
@@ -41,6 +47,11 @@ class summary(object):
         ----------
         keywords : iterable of (str, array_like)
             keywords, as derived from an SMSPEC file
+
+        Notes
+        -----
+        This class is not intended to be instantiated by users directly, who
+        should instead use the load function.
         """
 
         # mandatory
@@ -101,6 +112,33 @@ class summary(object):
 
     @property
     def dtype(self):
+        """dtype of the PARAMS for every ministep
+
+        Get the numpy.dtype for all the columns in the summary report. There
+        are often columns that are invalid, which are filtered out before this
+        function returns.
+
+        Returns
+        -------
+        dtype : numpy.dtype
+
+        Notes
+        -----
+        This function is not likely to be useful to an end user, who should
+        instead use functions like readall.
+
+        Examples
+        --------
+
+        dtype of array returned by readall:
+
+        >>> case = ecl3.summary.load('CASE.SPEC')
+        >>> report = case.readall('CASE.UNSMRY')
+        >>> type(report)
+        <class 'numpy.ndarray'>
+        >>> case.dtype == report.dtype
+        True
+        """
         kw = self.keywords
         wg = self.wgnames
         nu = self.nums
@@ -120,7 +158,9 @@ class summary(object):
     def readall(self, f):
         """Read full summary report
 
-        Eagerly read the full summary report into a numpy array
+        Eagerly read the full summary report into a numpy array. The input
+        .UNSMRY or .SNNNN file should belong to the same case as the .SMSPEC
+        loaded into this object.
 
         Parameters
         ----------
@@ -130,15 +170,40 @@ class summary(object):
         Returns
         -------
         summary : np.ndarray
+
+        Warnings
+        --------
+        This function is not stable and is likely to change in the future as
+        ecl3 matures.
+
+        Examples
+        --------
+        Read a unified summary file:
+
+        >>> case = ecl3.summary.load('CASE.SPEC')
+        >>> report = case.readall('CASE.UNSMRY')
+        >>> report.shape
+        123
+        >>> report['TIME'][10:13]
+        array([ 5.9388046,  8.035258 , 10.639209 ], dtype=float32)
+
+        Read report from non-unified summary:
+
+        >>> steps = glob.glob('CASE.S*')
+        >>> case = ecl3.summary.load('CASE.SPEC')
+        >>> reports = [case.load(step) for step in steps]
+        >>> report = numpy.concatenate(reports)
+        >>> report.shape
+        123
+        >>> report['TIME'][10:13]
+        array([ 5.9388046,  8.035258 , 10.639209 ], dtype=float32)
         """
         dtype = self.dtype
         alloc = lambda rows: np.empty(rows, dtype = dtype)
         return core.readall(str(f), alloc, dtype.itemsize, self.pos)
 
     def update(self, key, values):
-        """
-
-        Update and set the attributes from a keyword
+        """Update and set the attributes from a keyword
 
         Parameters
         ----------
@@ -149,36 +214,37 @@ class summary(object):
 
         Notes
         -----
-        If an keyword not in the above list is given to this function, it is
-        recorded in the index, and an info message is added to the log.
-        Otherwise, this is considered a no-op.
+        If a keyword not in the list of supported keywords is given to this
+        function, it is recorded in the index, and an info message is added to
+        the log, but there is otherwise no visible change to the object.
 
         Supported keywords:
-            INTEHEAD
-            RESTART
-            DIMENS
-            KEYWORDS
-            WGNAMES
-            NAMES
-            NUMS
-            LGRS
-            NUMLX
-            NUMLY
-            NUMLZ
-            LENGTHS
-            LENUNITS
-            MEASRMNT
-            UNITS
-            STARTDAT
-            LGRNAMES
-            LGRVEC
-            LGRTIMES
-            RUNTIMEI
-            RUNTIMED
-            STEPRESN
-            XCOORD
-            YCOORD
-            TIMESTMP
+
+        - INTEHEAD
+        - RESTART
+        - DIMENS
+        - KEYWORDS
+        - WGNAMES
+        - NAMES
+        - NUMS
+        - LGRS
+        - NUMLX
+        - NUMLY
+        - NUMLZ
+        - LENGTHS
+        - LENUNITS
+        - MEASRMNT
+        - UNITS
+        - STARTDAT
+        - LGRNAMES
+        - LGRVEC
+        - LGRTIMES
+        - RUNTIMEI
+        - RUNTIMED
+        - STEPRESN
+        - XCOORD
+        - YCOORD
+        - TIMESTMP
         """
         key = key.strip()
 
@@ -399,5 +465,16 @@ class summary(object):
         return s
 
 def load(path):
+    """Load a summary specification
+
+    Parameters
+    ----------
+    path : str_like
+        path to a summary specification (.SMSPEC) file
+
+    Returns
+    -------
+    summary : summary
+    """
     stream = core.stream(path)
     return summary.load((k.keyword, k.values) for k in stream.keywords())
