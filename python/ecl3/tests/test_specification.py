@@ -65,11 +65,11 @@ def makedate(dt):
 def test_valid_startdates(startdates):
     expected, array = startdates
     kw = ('STARTDAT', array)
-    s = summary.smspec([kw])
+    s = summary.summary([kw])
     assert s.startdate == expected
 
 def test_minimal_from_keywords():
-    s = summary.smspec(minimal_keywords)
+    s = summary.summary(minimal_keywords)
     s.check_integrity()
     assert s.nlist == 2
     assert s.keywords == ['WOPR', 'WOPT']
@@ -89,7 +89,7 @@ def test_minimal_from_keywords():
 def test_with_optional_from_keywords():
     kws = dict(minimal_keywords)
     kws.update(optional_keywords)
-    s = summary.smspec(kws)
+    s = summary.summary(kws)
     s.check_integrity()
 
     assert s.lgrs == ['LGR1', 'LGR2']
@@ -157,22 +157,22 @@ def test_intehead_mappings():
     for n, name in systems:
         for s, sim in simulators:
             kws['INTEHEAD'] = [n, s]
-            s = summary.smspec(kws)
+            s = summary.summary(kws)
             assert s.unitsystem == name
             assert s.simulator == sim
 
 def test_intehead_unitsystem_miss_warns(caplog):
     invalid = 0
-    _ = summary.smspec([('INTEHEAD', [invalid, 100])])
+    _ = summary.summary([('INTEHEAD', [invalid, 100])])
     assert len(caplog.records) == 1
 
 def test_intehead_simulator_miss_warns(caplog):
     invalid = 10
-    _ = summary.smspec([('INTEHEAD', [1, invalid])])
+    _ = summary.summary([('INTEHEAD', [1, invalid])])
     assert len(caplog.records) == 1
 
 def test_dtype_all_valid_keys():
-    s = summary.smspec(minimal_keywords)
+    s = summary.summary(minimal_keywords)
     columns = [
         ('REPORTSTEP', 'i4'), ('MINISTEP', 'i4'),
         ('WOPR.W1', 'f4'), ('WOPT.W2', 'f4'),
@@ -182,7 +182,7 @@ def test_dtype_all_valid_keys():
     assert s.pos == [0, 1]
 
 def test_dtype_custom_separator():
-    s = summary.smspec(minimal_keywords)
+    s = summary.summary(minimal_keywords)
     s.dtype_separator = '-'
     columns = [
         ('REPORTSTEP', 'i4'), ('MINISTEP', 'i4'),
@@ -199,7 +199,7 @@ def test_dtype_void_wgname():
     keywords['UNITS'   ].append('SM3/DAY')
     keywords['MEASRMNT'] += ['O:FLOWVO', 'LUME    ']
     keywords['NUMS'    ].append(0)
-    s = summary.smspec(keywords)
+    s = summary.summary(keywords)
     columns = [
         ('REPORTSTEP', 'i4'), ('MINISTEP', 'i4'),
         ('WOPR.W1', 'f4'), ('WOPT.W2', 'f4'),
