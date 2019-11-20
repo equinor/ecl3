@@ -342,7 +342,7 @@ py::object readall(
     expect("INTE", seqhdr.type);
 
     while (true) {
-        if ((rows - 1) * rowsize >= buffer.size()) {
+        if ((rows + 1) * rowsize >= buffer.size()) {
             buffer.resize(buffer.size() * 2);
         }
 
